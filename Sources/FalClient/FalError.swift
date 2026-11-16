@@ -6,4 +6,5 @@ enum FalError: Error {
     case unauthorized(message: String)
     case queueTimeout
     case invalidAppId(id: String)
+    case invalidProxyHeader(name: String)
 }

@@ -9,6 +9,10 @@ extension HTTPURLResponse {
 }
 
 extension Client {
+    private var reservedProxyHeaders: Set<String> {
+        ["accept", "authorization", "content-type", "user-agent", "x-fal-target-url"]
+    }
+
     func sendRequest(to urlString: String, input: Data?, queryParams: [String: Any]? = nil, options: RunOptions) async throws -> Data {
         guard var url = URL(string: urlString) else {
             throw FalError.invalidUrl(url: urlString)
@@ -49,10 +53,24 @@ extension Client {
             request.setValue(targetUrl.absoluteString, forHTTPHeaderField: "x-fal-target-url")
         }
 
+        if config.requestProxy != nil, let provider = config.proxyHeadersProvider {
+            for (name, value) in try await provider() {
+                let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                guard !normalized.isEmpty,
+                      !reservedProxyHeaders.contains(normalized),
+                      !name.contains("\r"), !name.contains("\n"),
+                      !value.contains("\r"), !value.contains("\n")
+                else {
+                    throw FalError.invalidProxyHeader(name: name)
+                }
+                request.setValue(value, forHTTPHeaderField: name)
+            }
+        }
+
         if input != nil, options.httpMethod != .get {
             request.httpBody = input
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await config.session.data(for: request)
         try checkResponseStatus(for: response, withData: data)
         return data
     }

@@ -1,5 +1,12 @@
 import Foundation
 
+/// Supplies headers for requests sent through ``FalClient.withProxy``.
+///
+/// The provider is evaluated for every proxied request so callers can attach
+/// short-lived authorization material without caching it in the client. The
+/// headers are never applied to direct FAL or presigned storage URLs.
+public typealias ProxyHeadersProvider = () async throws -> [String: String]
+
 public enum ClientCredentials: CustomStringConvertible {
     public var description: String {
         switch self {
@@ -32,9 +39,18 @@ public enum ClientCredentials: CustomStringConvertible {
 public struct ClientConfig {
     public let credentials: ClientCredentials
     public let requestProxy: String?
+    let proxyHeadersProvider: ProxyHeadersProvider?
+    let session: URLSession
 
-    init(credentials: ClientCredentials = .fromEnv, requestProxy: String? = nil) {
+    init(
+        credentials: ClientCredentials = .fromEnv,
+        requestProxy: String? = nil,
+        proxyHeadersProvider: ProxyHeadersProvider? = nil,
+        session: URLSession = .shared
+    ) {
         self.credentials = credentials
         self.requestProxy = requestProxy
+        self.proxyHeadersProvider = proxyHeadersProvider
+        self.session = session
     }
 }
