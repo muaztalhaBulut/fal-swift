@@ -55,7 +55,11 @@ public extension Client {
                 break
             }
             try await Task.sleep(nanoseconds: UInt64(Int(pollInterval.milliseconds * 1_000_000)))
-            elapsed += Int(Date().timeIntervalSince1970 * 1000) - start
+            // Recalculate the total elapsed time. Adding it on every polling
+            // iteration makes the counter grow quadratically (for example an
+            // eight-minute timeout with a two-second poll interval expires in
+            // roughly 44 seconds).
+            elapsed = Int(Date().timeIntervalSince1970 * 1000) - start
         }
         if !isCompleted {
             throw FalError.queueTimeout
