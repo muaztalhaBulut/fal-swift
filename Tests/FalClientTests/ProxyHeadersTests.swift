@@ -78,4 +78,48 @@ final class ProxyHeadersTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
+    func testSubscribeHonorsTheConfiguredTimeoutAcrossMultiplePolls() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ProxyHeadersURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        var statusPolls = 0
+
+        ProxyHeadersURLProtocol.requestHandler = { request in
+            let target = try XCTUnwrap(request.value(forHTTPHeaderField: "x-fal-target-url"))
+            let body: String
+            if request.httpMethod == "POST" {
+                body = #"{"request_id":"request-id"}"#
+            } else if target.contains("/status") {
+                statusPolls += 1
+                body = statusPolls >= 5
+                    ? #"{"status":"COMPLETED","logs":[],"response_url":"https://queue.fal.run/fal-ai/test-model/requests/request-id"}"#
+                    : #"{"status":"IN_PROGRESS","logs":[]}"#
+            } else {
+                body = #"{"ok":true}"#
+            }
+            return (
+                HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )!,
+                Data(body.utf8)
+            )
+        }
+
+        let client = FalClient(config: ClientConfig(
+            requestProxy: "https://proxy.example/fal/proxy/index",
+            session: session
+        ))
+        let result: Payload = try await client.subscribe(
+            to: "fal-ai/test-model",
+            pollInterval: .milliseconds(40),
+            timeout: .milliseconds(250)
+        )
+
+        XCTAssertEqual(statusPolls, 5)
+        XCTAssertEqual(result, ["ok": true])
+    }
 }
